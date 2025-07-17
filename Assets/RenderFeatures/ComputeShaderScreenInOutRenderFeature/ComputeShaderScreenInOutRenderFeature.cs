@@ -3,11 +3,18 @@ using UnityEngine.Rendering;
 using UnityEngine.Rendering.RenderGraphModule;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.Experimental.Rendering;
-using UnityEditor.Rendering;
 using UnityEngine.Playables;
 
-public class HCSNewRendererFeature : ScriptableRendererFeature {
-    public static HCSNewRendererFeature Instance { get; private set; }
+// This RendererFeature demonstrates how to integrate a Compute Shader with RenderGraph.
+// In this example, the output of the Compute Shader is used to modify the CameraColor texture.
+// Additionally, once the CameraColor texture is updated, it is used as input for another Compute Shader pass.
+
+// This sample is based on this video https://www.youtube.com/watch?v=v_WkGKn601M by git-amend
+// In the original sample the output image of the compute shader is applied to a RenderTexture
+// In this particular case, the main difference starts in the line 91
+
+public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
+    public static ComputeShaderScreenInOutRenderFeature Instance { get; private set; }
 
     class HeatmapPass : ScriptableRenderPass {
         ComputeShader computeShader;
@@ -29,12 +36,14 @@ public class HCSNewRendererFeature : ScriptableRendererFeature {
         RTHandle heatmapHandleP2;
 
         public void Setup(ComputeShader cs, ComputeShader cs2) {
+            // Here are define the both Compute shader
+            // The output of the first one will be used as CameraColor 
+            // and the second one uses the current CameraColor as input to process
+            // another one as result.
             computeShader = cs;
             computeShaderP2 = cs2;
             kernel = cs.FindKernel("CSMain");
             kernelP2 = cs2.FindKernel("CSMain");
-
-            //kernelHandle = shader.FindKernel("Square");
 
             int halfRes = Screen.width >> 1;
             int quarterRes = Screen.width >> 2;
@@ -124,21 +133,19 @@ public class HCSNewRendererFeature : ScriptableRendererFeature {
                 ctx.cmd.SetComputeTextureParam(d.compute, d.kernel, "heatmapTexture", d.output);
                 ctx.cmd.DispatchCompute(d.compute, d.kernel, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
             });
-
+            
+            // Here the texture resulted from the first compute shader
+            // is assigned to the camera Color
             var resourceData = context.Get<UniversalResourceData>();
             resourceData.cameraColor = texHandle;
-
+            
+            // A new texture is created based on the active Color Texture
             var newTextureHandle = resourceData.activeColorTexture;
             
-
-
-
-            // NEW COMPUTE PASS
+            // A NEW COMPUTE PASS is Built
             TextureHandle texHandle2 = graph.ImportTexture(heatmapHandleP2);
             BufferHandle enemyHandle2 = graph.ImportBuffer(enemyBuffer);
-
-
-
+            
             builder.Dispose();
 
             using IComputeRenderGraphBuilder builderP2 = graph.AddComputePass("HeatmapPassP2", out PassDataP2 dataP2);
@@ -159,7 +166,9 @@ public class HCSNewRendererFeature : ScriptableRendererFeature {
                 ctx.cmd.SetComputeVectorParam(d.compute, d.kernel, d.myrect);
                 ctx.cmd.DispatchCompute(d.compute, d.kernel, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
             });
-
+            
+            // Then the resulted texture is assigned to the current
+            // Camera Color
             resourceData.cameraColor = texHandle2;
         }
 

@@ -4,8 +4,15 @@ using UnityEngine.Rendering.RenderGraphModule;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.Experimental.Rendering;
 
-public class HCSRendererFeature : ScriptableRendererFeature {
-    public static HCSRendererFeature Instance { get; private set; }
+// This RendererFeature shows how a compute shader can be used together with RenderGraph and how use the output 
+// in the cameraColor
+
+// This sample is based on this video https://www.youtube.com/watch?v=v_WkGKn601M by git-amend
+// In the original sample the output image of the compute shader is applied to a RenderTexture
+// In this particular case, the is only a little chance in the line 91
+
+public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
+    public static ComputeShaderScreenOutRenderFeature Instance { get; private set; }
 
     class HeatmapPass : ScriptableRenderPass {
         ComputeShader computeShader;
@@ -80,7 +87,9 @@ public class HCSRendererFeature : ScriptableRendererFeature {
                 ctx.cmd.SetComputeTextureParam(d.compute, d.kernel, "heatmapTexture", d.output);
                 ctx.cmd.DispatchCompute(d.compute, d.kernel, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
             });
-
+            
+            // Here we get the ResourceData
+            // and assign to the cameraColor the texHandle
             var resourceData = context.Get<UniversalResourceData>();
             resourceData.cameraColor = texHandle;
         }
