@@ -10,8 +10,8 @@ using UnityEngine.Playables;
 // Additionally, once the CameraColor texture is updated, it is used as input for another Compute Shader pass.
 
 // This sample is based on this video https://www.youtube.com/watch?v=v_WkGKn601M by git-amend
-// In the original sample the output image of the compute shader is applied to a RenderTexture
-// In this particular case, the main difference starts in the line 91
+// In the original sample the output image of the compute shader is applied to a RenderTexture instead of
+// to the CameraColor texture.
 
 public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
     public static ComputeShaderScreenInOutRenderFeature Instance { get; private set; }
