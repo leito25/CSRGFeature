@@ -14,57 +14,52 @@ using UnityEngine.Playables;
 // to the CameraColor texture.
 
 public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
-    public static ComputeShaderScreenInOutRenderFeature Instance { get; private set; }
-
     class HeatmapPass : ScriptableRenderPass {
-        ComputeShader computeShader;
-        int kernel;
-        int kernelP2;
+        // Compute Shader scripts
+        ComputeShader computeShader01;
+        ComputeShader computeShader02;
+        
+        // kernel of each compute shader
+        int kernelComputeShader01;
+        int kernelComputeShader02;
 
+        // Heatmap compute shader (uses a compute shader to simulated a group of enemies moving around)
         GraphicsBuffer enemyBuffer;
         Vector2[] enemyPositions;
         int enemyCount = 64;
 
-        RTHandle heatmapHandle;
+        // RT handles intended for later use by the render graph.
+        RTHandle heatmapHandle01;
+        RTHandle heatmapHandle02;
+        
+        // Screen resolution
         int width = Screen.width, height = Screen.height;
 
-        public RTHandle Heatmap => heatmapHandle;
-
-        ComputeShader computeShaderP2;
-
-        Vector4 rectF4;
-        RTHandle heatmapHandleP2;
-
-        public void Setup(ComputeShader cs, ComputeShader cs2) {
+        public void Setup(ComputeShader cs1, ComputeShader cs2) {
+            
             // Here are define the both Compute shader
             // The output of the first one will be used as CameraColor 
             // and the second one uses the current CameraColor as input to process
             // another one as result.
-            computeShader = cs;
-            computeShaderP2 = cs2;
-            kernel = cs.FindKernel("CSMain");
-            kernelP2 = cs2.FindKernel("CSMain");
-
-            int halfRes = Screen.width >> 1;
-            int quarterRes = Screen.width >> 2;
-
-            Vector4 rect = new Vector4(quarterRes, quarterRes, halfRes, halfRes);
-
-            rectF4 = new Vector4(0, 1, 1, 1);
-
-            if (heatmapHandle == null || heatmapHandle.rt.width != width || heatmapHandle.rt.height != height) {
-                heatmapHandle?.Release();
+            computeShader01 = cs1;
+            computeShader02 = cs2;
+            kernelComputeShader01 = cs1.FindKernel("CSMain");
+            kernelComputeShader02 = cs2.FindKernel("CSMain");
+            
+            
+            if (heatmapHandle01 == null || heatmapHandle01.rt.width != width || heatmapHandle01.rt.height != height) {
+                heatmapHandle01?.Release();
                 var desc = new RenderTextureDescriptor(width, height, RenderTextureFormat.Default, 0) {
                     enableRandomWrite = true,
                     msaaSamples = 1,
                     sRGB = false,
                     useMipMap = false
                 };
-                heatmapHandle = RTHandles.Alloc(desc, name: "_HeatmapRT");
+                heatmapHandle01 = RTHandles.Alloc(desc, name: "_HeatmapRT01");
             }
-            if (heatmapHandleP2 == null || heatmapHandleP2.rt.width != width || heatmapHandleP2.rt.height != height)
+            if (heatmapHandle02 == null || heatmapHandle02.rt.width != width || heatmapHandle02.rt.height != height)
             {
-                heatmapHandleP2?.Release();
+                heatmapHandle02?.Release();
                 var desc = new RenderTextureDescriptor(width, height, RenderTextureFormat.Default, 0)
                 {
                     enableRandomWrite = true,
@@ -72,7 +67,7 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
                     sRGB = false,
                     useMipMap = false
                 };
-                heatmapHandleP2 = RTHandles.Alloc(desc, name: "_HeatmapRTP2");
+                heatmapHandle02 = RTHandles.Alloc(desc, name: "_HeatmapRT02");
             }
 
             if (enemyBuffer == null || enemyBuffer.count != enemyCount) {
@@ -81,29 +76,30 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
                 enemyPositions = new Vector2[enemyCount];
             }
         }
-
-        class PassData {
+        
+        
+        // Compute Pass Data 
+        // This will be used for both Compute Shaders
+        class ComputePassData {
             public ComputeShader compute;
             public int kernel;
             public TextureHandle output;
-            public Vector2 texSize;
+            //public Vector2 texSize;
             public BufferHandle enemyHandle;
             public int enemyCount;
+            public TextureHandle input;
         }
-
-        class PassDataP2
-        {
-            public ComputeShader compute;
-            public int kernel;
-            public TextureHandle output;
-            public Vector2 texSize;
-            public BufferHandle enemyHandle;
-            public int enemyCount;
-            public Vector4 myrect;
-            public TextureHandle inputt;
-        }
-
+        
+        // This is the core of the RenderGraph system, where compute passes are executed every frame.
+        // Their purpose can be summarized in three steps:
+        
+        // 1- Updates enemy positions using Perlin noise, then uploads them to a GPU buffer.
+        // 2- Sets up two compute passes in the render graph: the first generates a heatmap texture
+        //    based on enemy positions, while the second further processes the resulting texture.
+        // 3- Assigns the resulting textures from each compute pass to the camera's color buffer for rendering.
         public override void RecordRenderGraph(RenderGraph graph, ContextContainer context) {
+            
+            // Populated the enemy positions
             for (int i = 0; i < enemyCount; i++) {
                 float t = Time.time * 0.5f + i * 0.1f;
                 float x = Mathf.PerlinNoise(t, i * 1.31f) * width;
@@ -111,29 +107,38 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
                 enemyPositions[i] = new Vector2(x, y);
             }
             
+            // Set the enemy buffer data
             enemyBuffer.SetData(enemyPositions);
 
-            TextureHandle texHandle = graph.ImportTexture(heatmapHandle);
+            // The texture handle and the buffer handle for the first compute pass
+            TextureHandle texHandle = graph.ImportTexture(heatmapHandle01);
             BufferHandle enemyHandle = graph.ImportBuffer(enemyBuffer);
 
-            /**/
-            using IComputeRenderGraphBuilder builder = graph.AddComputePass("HeatmapPass", out PassData data);
-            data.compute = computeShader;
-            data.kernel = kernel;
-            data.output = texHandle;
-            data.enemyHandle = enemyHandle;
-            data.enemyCount = enemyCount;
+            // This is the definition of the compute render pass,
+            // where the data to be processed by the compute shader is assigned.
+            using (var builder = graph.AddComputePass<ComputePassData>("ComputePass01", out var data))
+            {
+                // Assign data to the compute shader data
+                data.compute = computeShader01;
+                data.kernel = kernelComputeShader01;
+                data.output = texHandle;
+                data.enemyHandle = enemyHandle;
+                data.enemyCount = enemyCount;
 
-            builder.UseTexture(texHandle, AccessFlags.Write);
-            builder.UseBuffer(enemyHandle, AccessFlags.Read);
+                // Declare resource usage
+                builder.UseTexture(texHandle, AccessFlags.Write);
+                builder.UseBuffer(enemyHandle, AccessFlags.Read);
 
-            builder.SetRenderFunc((PassData d, ComputeGraphContext ctx) => {
-                ctx.cmd.SetComputeIntParam(d.compute, "enemyCount", d.enemyCount);
-                ctx.cmd.SetComputeBufferParam(d.compute, d.kernel, "enemyPositions", d.enemyHandle);
-                ctx.cmd.SetComputeTextureParam(d.compute, d.kernel, "heatmapTexture", d.output);
-                ctx.cmd.DispatchCompute(d.compute, d.kernel, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
-            });
-            
+                // Set the function to execute the compute pass
+                builder.SetRenderFunc((ComputePassData d, ComputeGraphContext ctx) =>
+                {
+                    ctx.cmd.SetComputeIntParam(d.compute, "enemyCount", d.enemyCount);
+                    ctx.cmd.SetComputeBufferParam(d.compute, d.kernel, "enemyPositions", d.enemyHandle);
+                    ctx.cmd.SetComputeTextureParam(d.compute, d.kernel, "heatmapTexture", d.output);
+                    ctx.cmd.DispatchCompute(d.compute, d.kernel, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
+                });
+            }
+
             // Here the texture resulted from the first compute shader
             // is assigned to the camera Color
             var resourceData = context.Get<UniversalResourceData>();
@@ -142,48 +147,50 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
             // A new texture is created based on the active Color Texture
             var newTextureHandle = resourceData.activeColorTexture;
             
-            // A NEW COMPUTE PASS is Built
-            TextureHandle texHandle2 = graph.ImportTexture(heatmapHandleP2);
-            BufferHandle enemyHandle2 = graph.ImportBuffer(enemyBuffer);
+            // A new compute pass is Built
+            TextureHandle texHandle2 = graph.ImportTexture(heatmapHandle02);
             
-            builder.Dispose();
+            // This is the second compute render pass, in this pass
+            // the input is the current activeColorTexture and the output
+            // after being computed the data, will be the newTextureHandle
+            using (var builder = graph.AddComputePass<ComputePassData>("ComputePass02", out var data))
+            {
+                // Assign data to the compute shader data
+                data.compute = computeShader02;
+                data.kernel = kernelComputeShader02;
+                data.output = texHandle2;
+                data.input = newTextureHandle;
 
-            using IComputeRenderGraphBuilder builderP2 = graph.AddComputePass("HeatmapPassP2", out PassDataP2 dataP2);
-            dataP2.compute = computeShaderP2;
-            dataP2.kernel = kernelP2;
-            dataP2.output = texHandle2;
-            dataP2.enemyHandle = enemyHandle2;
-            dataP2.inputt = newTextureHandle;
+                // Declare resource usage
+                builder.UseTexture(newTextureHandle, AccessFlags.ReadWrite);
+                builder.UseTexture(texHandle2, AccessFlags.Write);
 
-            builderP2.UseTexture(newTextureHandle, AccessFlags.Write);
-            builderP2.UseTexture(texHandle2, AccessFlags.Write);
-            builderP2.UseBuffer(enemyHandle2, AccessFlags.Read);
-
-            builderP2.SetRenderFunc((PassDataP2 d, ComputeGraphContext ctx) => {
-                ctx.cmd.SetComputeTextureParam(d.compute, d.kernel, "heatmapTexture", d.inputt);
-                
-                ctx.cmd.SetComputeTextureParam(d.compute, d.kernel, "Result", d.output);
-                ctx.cmd.SetComputeVectorParam(d.compute, d.kernel, d.myrect);
-                ctx.cmd.DispatchCompute(d.compute, d.kernel, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
-            });
+                // Set the function to execute the compute pass
+                builder.SetRenderFunc((ComputePassData d, ComputeGraphContext ctx) =>
+                {
+                    ctx.cmd.SetComputeTextureParam(d.compute, d.kernel, "heatmapTexture", d.input);
+                    ctx.cmd.SetComputeTextureParam(d.compute, d.kernel, "Result", d.output);
+                    ctx.cmd.DispatchCompute(d.compute, d.kernel, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
+                });
+            }
             
-            // Then the resulted texture is assigned to the current
+            // Then the resulted texture of the compute pass is assigned to the current
             // Camera Color
             resourceData.cameraColor = texHandle2;
         }
 
 
         public void Cleanup() {
-            heatmapHandle?.Release();
-            heatmapHandle = null;
+            heatmapHandle01?.Release();
+            heatmapHandle01 = null;
 
             enemyBuffer?.Release();
             enemyBuffer = null;
         }
     }
 
-    [SerializeField] ComputeShader computeShader;
-    [SerializeField] ComputeShader computeShaderP2;
+    [SerializeField] ComputeShader computeShader01;
+    [SerializeField] ComputeShader computeShader02;
     HeatmapPass pass;
 
     public override void Create() {
@@ -191,14 +198,13 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
         {
             renderPassEvent = RenderPassEvent.BeforeRenderingPostProcessing
         };
-        Instance = this;
     }
 
     public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData) {
-        if (!SystemInfo.supportsComputeShaders || computeShader == null)
+        if (!SystemInfo.supportsComputeShaders)
             return;
 
-        pass.Setup(computeShader, computeShaderP2);
+        pass.Setup(computeShader01, computeShader02);
         if (renderingData.cameraData.cameraType == CameraType.Game)
         {
             renderer.EnqueuePass(pass);
@@ -208,6 +214,4 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
     protected override void Dispose(bool disposing) {
         pass?.Cleanup();
     }
-
-    public RTHandle GetHeatmapTexture() => pass?.Heatmap;
 }
