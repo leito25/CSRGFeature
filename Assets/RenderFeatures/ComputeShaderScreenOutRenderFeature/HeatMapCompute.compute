@@ -1,8 +1,6 @@
 #pragma kernel CSMain
 
 RWTexture2D<float> heatmapTexture;
-float2 texSize;
-
 StructuredBuffer<float2> enemyPositions;
 int enemyCount;
 

@@ -83,11 +83,10 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
         class ComputePassData {
             public ComputeShader compute;
             public int kernel;
-            public TextureHandle output;
-            //public Vector2 texSize;
-            public BufferHandle enemyHandle;
             public int enemyCount;
+            public BufferHandle enemyHandle;
             public TextureHandle input;
+            public TextureHandle output;
         }
         
         // This is the core of the RenderGraph system, where compute passes are executed every frame.
@@ -158,8 +157,8 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
                 // Assign data to the compute shader data
                 data.compute = computeShader02;
                 data.kernel = kernelComputeShader02;
-                data.output = texHandle2;
                 data.input = newTextureHandle;
+                data.output = texHandle2;
 
                 // Declare resource usage
                 builder.UseTexture(newTextureHandle, AccessFlags.ReadWrite);
