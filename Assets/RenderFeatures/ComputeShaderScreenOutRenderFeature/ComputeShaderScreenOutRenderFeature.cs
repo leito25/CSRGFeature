@@ -4,12 +4,12 @@ using UnityEngine.Rendering.RenderGraphModule;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.Experimental.Rendering;
 
-// This RendererFeature shows how a compute shader can be used together with RenderGraph and how use the output 
+// This RendererFeature shows how a compute shader can be used together with RenderGraph and how to use the output of the shader
 // in the cameraColor
 
 // This sample is based on this video https://www.youtube.com/watch?v=v_WkGKn601M by git-amend
 // In the original sample the output image of the compute shader is applied to a RenderTexture
-// In this particular case, the is only a little chance in the line 91
+// In this particular case, there is only a little change in the "InComputePass".
 
 public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
     class HeatmapPass : ScriptableRenderPass {
@@ -29,7 +29,7 @@ public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
         int width = Screen.width, height = Screen.height;
 
         public void Setup(ComputeShader cs) {
-            // Here are define the compute shader
+            // Here we define the compute shader
             computeShader = cs;
             kernel = cs.FindKernel("CSMain");
 
@@ -60,7 +60,7 @@ public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
             public int enemyCount;
         }
         
-        // This is the core of the RenderGraph system, where compute pass is executed every frame.
+        // This is the core of the RenderGraph system, where the compute pass is executed every frame.
         // Their purpose can be summarized in three steps:
         
         // 1- Updates enemy positions using Perlin noise, then uploads them to a GPU buffer.
