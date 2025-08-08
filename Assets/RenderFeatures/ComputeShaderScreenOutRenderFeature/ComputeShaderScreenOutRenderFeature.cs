@@ -4,8 +4,8 @@ using UnityEngine.Rendering.RenderGraphModule;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.Experimental.Rendering;
 
-// This RendererFeature shows how a compute shader can be used together with RenderGraph and how to use the output of the shader
-// in the cameraColor
+// This RendererFeature demonstrates how to use a compute shader with RenderGraph 
+// and how to apply the compute shader's output to the cameraColor.
 
 // This sample is based on this video https://www.youtube.com/watch?v=v_WkGKn601M by git-amend
 // In the original sample the output image of the compute shader is applied to a RenderTexture
@@ -13,14 +13,15 @@ using UnityEngine.Experimental.Rendering;
 
 public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
     class HeatmapPass : ScriptableRenderPass {
+        
         // Compute Shader
-        ComputeShader computeShader;
+        ComputeShader HeatmapComputeShader;
         int kernel;
 
         // Compute Shader data
         GraphicsBuffer enemyBuffer;
         Vector2[] enemyPositions;
-        int enemyCount = 64;
+        const int enemyCount = 64;
         
         // RT handles intended for later use by the render graph.
         RTHandle heatmapHandle;
@@ -30,7 +31,7 @@ public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
 
         public void Setup(ComputeShader cs) {
             // Here we define the compute shader
-            computeShader = cs;
+            HeatmapComputeShader = cs;
             kernel = cs.FindKernel("CSMain");
 
             if (heatmapHandle == null || heatmapHandle.rt.width != width || heatmapHandle.rt.height != height) {
@@ -86,10 +87,10 @@ public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
 
             // This is the definition of the compute render pass,
             // where the data to be processed by the compute shader is assigned.
-            using (var builder = graph.AddComputePass<ComputePassData>("ComputePass01", out var data))
+            using (var builder = graph.AddComputePass<ComputePassData>("ComputeHeatmapPass", out var data))
             {
                 // Assign data to the compute shader data
-                data.compute = computeShader;
+                data.compute = HeatmapComputeShader;
                 data.kernel = kernel;
                 data.output = texHandle;
                 data.enemyHandle = enemyHandle;
@@ -100,12 +101,12 @@ public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
                 builder.UseBuffer(enemyHandle, AccessFlags.Read);
 
                 // Set the function to execute the compute pass
-                builder.SetRenderFunc((ComputePassData d, ComputeGraphContext ctx) =>
+                builder.SetRenderFunc((ComputePassData data, ComputeGraphContext ctx) =>
                 {
-                    ctx.cmd.SetComputeIntParam(d.compute, "enemyCount", d.enemyCount);
-                    ctx.cmd.SetComputeBufferParam(d.compute, d.kernel, "enemyPositions", d.enemyHandle);
-                    ctx.cmd.SetComputeTextureParam(d.compute, d.kernel, "heatmapTexture", d.output);
-                    ctx.cmd.DispatchCompute(d.compute, d.kernel, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
+                    ctx.cmd.SetComputeIntParam(data.compute, "enemyCount", data.enemyCount);
+                    ctx.cmd.SetComputeBufferParam(data.compute, data.kernel, "enemyPositions", data.enemyHandle);
+                    ctx.cmd.SetComputeTextureParam(data.compute, data.kernel, "heatmapTexture", data.output);
+                    ctx.cmd.DispatchCompute(data.compute, data.kernel, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
                 });
             }
             
@@ -126,7 +127,7 @@ public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
         }
     }
 
-    [SerializeField] ComputeShader computeShader;
+    [SerializeField] ComputeShader HeatmapComputeShader;
     HeatmapPass pass;
 
     public override void Create() {
@@ -139,7 +140,7 @@ public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
         if (!SystemInfo.supportsComputeShaders)
             return;
 
-        pass.Setup(computeShader);
+        pass.Setup(HeatmapComputeShader);
         if (renderingData.cameraData.cameraType == CameraType.Game)
         {
             renderer.EnqueuePass(pass);

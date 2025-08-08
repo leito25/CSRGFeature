@@ -3,7 +3,6 @@ using UnityEngine.Rendering;
 using UnityEngine.Rendering.RenderGraphModule;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.Experimental.Rendering;
-using UnityEngine.Playables;
 
 // This RendererFeature demonstrates how to integrate a Compute Shader with RenderGraph.
 // In this example, the output of the Compute Shader is used to modify the CameraColor texture.
@@ -15,22 +14,23 @@ using UnityEngine.Playables;
 
 public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
     class HeatmapPass : ScriptableRenderPass {
+        
         // Compute Shader scripts
-        ComputeShader computeShader01;
-        ComputeShader computeShader02;
+        ComputeShader HeatmapComputeShader;
+        ComputeShader HeatmapBrightnessComputeShader;
         
         // kernel of each compute shader
-        int kernelComputeShader01;
-        int kernelComputeShader02;
+        int kernelHeatMapComputeShader;
+        int kernelHeatmapBrightnessComputeShader;
 
         // Heatmap compute shader (uses a compute shader to simulated a group of enemies moving around)
         GraphicsBuffer enemyBuffer;
         Vector2[] enemyPositions;
-        int enemyCount = 64;
+        const int enemyCount = 64;
 
         // RT handles intended for later use by the render graph.
-        RTHandle heatmapHandle01;
-        RTHandle heatmapHandle02;
+        RTHandle heatmapTextureHandle;
+        RTHandle heatmapBrightnessTextureHandle;
         
         // Screen resolution
         int width = Screen.width, height = Screen.height;
@@ -41,25 +41,25 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
             // The output of the first one will be used as CameraColor 
             // and the second one uses the current CameraColor as input to process
             // another one as result.
-            computeShader01 = cs1;
-            computeShader02 = cs2;
-            kernelComputeShader01 = cs1.FindKernel("CSMain");
-            kernelComputeShader02 = cs2.FindKernel("CSMain");
+            HeatmapComputeShader = cs1;
+            HeatmapBrightnessComputeShader = cs2;
+            kernelHeatMapComputeShader = cs1.FindKernel("CSMain");
+            kernelHeatmapBrightnessComputeShader = cs2.FindKernel("CSMain");
             
             
-            if (heatmapHandle01 == null || heatmapHandle01.rt.width != width || heatmapHandle01.rt.height != height) {
-                heatmapHandle01?.Release();
+            if (heatmapTextureHandle == null || heatmapTextureHandle.rt.width != width || heatmapTextureHandle.rt.height != height) {
+                heatmapTextureHandle?.Release();
                 var desc = new RenderTextureDescriptor(width, height, RenderTextureFormat.Default, 0) {
                     enableRandomWrite = true,
                     msaaSamples = 1,
                     sRGB = false,
                     useMipMap = false
                 };
-                heatmapHandle01 = RTHandles.Alloc(desc, name: "_HeatmapRT01");
+                heatmapTextureHandle = RTHandles.Alloc(desc, name: "_HeatmapRT01");
             }
-            if (heatmapHandle02 == null || heatmapHandle02.rt.width != width || heatmapHandle02.rt.height != height)
+            if (heatmapBrightnessTextureHandle == null || heatmapBrightnessTextureHandle.rt.width != width || heatmapBrightnessTextureHandle.rt.height != height)
             {
-                heatmapHandle02?.Release();
+                heatmapBrightnessTextureHandle?.Release();
                 var desc = new RenderTextureDescriptor(width, height, RenderTextureFormat.Default, 0)
                 {
                     enableRandomWrite = true,
@@ -67,7 +67,7 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
                     sRGB = false,
                     useMipMap = false
                 };
-                heatmapHandle02 = RTHandles.Alloc(desc, name: "_HeatmapRT02");
+                heatmapBrightnessTextureHandle = RTHandles.Alloc(desc, name: "_HeatmapRT02");
             }
 
             if (enemyBuffer == null || enemyBuffer.count != enemyCount) {
@@ -94,7 +94,8 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
         
         // 1- Updates enemy positions using Perlin noise, then uploads them to a GPU buffer.
         // 2- Sets up two compute passes in the render graph: the first generates a heatmap texture
-        //    based on enemy positions, while the second further processes the resulting texture.
+        //      based on enemy positions, while the second further processes the resulting texture
+        //      adding a bit of brightness with another compute shader.
         // 3- Assigns the resulting textures from each compute pass to the camera's color buffer for rendering.
         public override void RecordRenderGraph(RenderGraph graph, ContextContainer context) {
             
@@ -110,16 +111,16 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
             enemyBuffer.SetData(enemyPositions);
 
             // The texture handle and the buffer handle for the first compute pass
-            TextureHandle texHandle = graph.ImportTexture(heatmapHandle01);
+            TextureHandle texHandle = graph.ImportTexture(heatmapTextureHandle);
             BufferHandle enemyHandle = graph.ImportBuffer(enemyBuffer);
 
             // This is the definition of the compute render pass,
             // where the data to be processed by the compute shader is assigned.
-            using (var builder = graph.AddComputePass<ComputePassData>("ComputePass01", out var data))
+            using (var builder = graph.AddComputePass<ComputePassData>("ComputeHeatmapPass", out var data))
             {
                 // Assign data to the compute shader data
-                data.compute = computeShader01;
-                data.kernel = kernelComputeShader01;
+                data.compute = HeatmapComputeShader;
+                data.kernel = kernelHeatMapComputeShader;
                 data.output = texHandle;
                 data.enemyHandle = enemyHandle;
                 data.enemyCount = enemyCount;
@@ -129,12 +130,12 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
                 builder.UseBuffer(enemyHandle, AccessFlags.Read);
 
                 // Set the function to execute the compute pass
-                builder.SetRenderFunc((ComputePassData d, ComputeGraphContext ctx) =>
+                builder.SetRenderFunc((ComputePassData data, ComputeGraphContext ctx) =>
                 {
-                    ctx.cmd.SetComputeIntParam(d.compute, "enemyCount", d.enemyCount);
-                    ctx.cmd.SetComputeBufferParam(d.compute, d.kernel, "enemyPositions", d.enemyHandle);
-                    ctx.cmd.SetComputeTextureParam(d.compute, d.kernel, "heatmapTexture", d.output);
-                    ctx.cmd.DispatchCompute(d.compute, d.kernel, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
+                    ctx.cmd.SetComputeIntParam(data.compute, "enemyCount", data.enemyCount);
+                    ctx.cmd.SetComputeBufferParam(data.compute, data.kernel, "enemyPositions", data.enemyHandle);
+                    ctx.cmd.SetComputeTextureParam(data.compute, data.kernel, "heatmapTexture", data.output);
+                    ctx.cmd.DispatchCompute(data.compute, data.kernel, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
                 });
             }
 
@@ -142,54 +143,52 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
             // is assigned to the camera Color
             var resourceData = context.Get<UniversalResourceData>();
             resourceData.cameraColor = texHandle;
-            
-            // A new texture is created based on the active Color Texture
-            var newTextureHandle = resourceData.activeColorTexture;
-            
-            // A new compute pass is Built
-            TextureHandle texHandle2 = graph.ImportTexture(heatmapHandle02);
+
+            // A new compute pass will be build and this is the resulted Texture handle
+            TextureHandle resultedTextureHandle = graph.ImportTexture(heatmapBrightnessTextureHandle);
             
             // This is the second compute render pass, in this pass
             // the input is the current activeColorTexture and the output
-            // after being computed the data, will be the newTextureHandle
-            using (var builder = graph.AddComputePass<ComputePassData>("ComputePass02", out var data))
+            // after being computed the data, will be the resulted texture handle
+            using (var builder = graph.AddComputePass<ComputePassData>("ComputeCameraColorFromHeatmapPass", out var data))
             {
                 // Assign data to the compute shader data
-                data.compute = computeShader02;
-                data.kernel = kernelComputeShader02;
-                data.input = newTextureHandle;
-                data.output = texHandle2;
+                data.compute = HeatmapBrightnessComputeShader;
+                data.kernel = kernelHeatmapBrightnessComputeShader;
+                data.input = resourceData.activeColorTexture; // here the activeColorTexture is added directly to the dataPass
+                data.output = resultedTextureHandle;
 
-                // Declare resource usage
-                builder.UseTexture(newTextureHandle, AccessFlags.ReadWrite);
-                builder.UseTexture(texHandle2, AccessFlags.Write);
+                // Declare the resource usage: the current activeColorTexture is directly utilized in the builder.
+                builder.UseTexture(resourceData.activeColorTexture, AccessFlags.Read);
+                builder.UseTexture(resultedTextureHandle, AccessFlags.Write);
 
                 // Set the function to execute the compute pass
-                builder.SetRenderFunc((ComputePassData d, ComputeGraphContext ctx) =>
+                builder.SetRenderFunc((ComputePassData data, ComputeGraphContext ctx) =>
                 {
-                    ctx.cmd.SetComputeTextureParam(d.compute, d.kernel, "heatmapTexture", d.input);
-                    ctx.cmd.SetComputeTextureParam(d.compute, d.kernel, "Result", d.output);
-                    ctx.cmd.DispatchCompute(d.compute, d.kernel, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
+                    ctx.cmd.SetComputeTextureParam(data.compute, data.kernel, "heatmapTexture", data.input);
+                    ctx.cmd.SetComputeTextureParam(data.compute, data.kernel, "Result", data.output);
+                    ctx.cmd.DispatchCompute(data.compute, data.kernel, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
                 });
             }
             
-            // Then the resulted texture of the compute pass is assigned to the current
-            // Camera Color
-            resourceData.cameraColor = texHandle2;
+            // The resulted texture of the compute pass is assigned to the current Camera Color
+            resourceData.cameraColor = resultedTextureHandle;
         }
 
 
         public void Cleanup() {
-            heatmapHandle01?.Release();
-            heatmapHandle01 = null;
+            heatmapTextureHandle?.Release();
+            heatmapTextureHandle = null;
+            heatmapBrightnessTextureHandle?.Release();
+            heatmapBrightnessTextureHandle = null;
 
             enemyBuffer?.Release();
             enemyBuffer = null;
         }
     }
 
-    [SerializeField] ComputeShader computeShader01;
-    [SerializeField] ComputeShader computeShader02;
+    [SerializeField] ComputeShader HeatmapComputeShader;
+    [SerializeField] ComputeShader HeatmapBrightnessComputeShader;
     HeatmapPass pass;
 
     public override void Create() {
@@ -203,7 +202,7 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
         if (!SystemInfo.supportsComputeShaders)
             return;
 
-        pass.Setup(computeShader01, computeShader02);
+        pass.Setup(HeatmapComputeShader, HeatmapBrightnessComputeShader);
         if (renderingData.cameraData.cameraType == CameraType.Game)
         {
             renderer.EnqueuePass(pass);

@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: ComputeShaderScreenOutRenderFeature
   m_EditorClassIdentifier: 
   m_Active: 0
-  computeShader: {fileID: 7200000, guid: db0d52c7ed1286442a23949469a5b153, type: 3}
+  HeatmapComputeShader: {fileID: 7200000, guid: db0d52c7ed1286442a23949469a5b153, type: 3}
 --- !u!114 &-8105375138481339841
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -27,8 +27,8 @@ MonoBehaviour:
   m_Name: ComputeShaderScreenInOutRenderFeature
   m_EditorClassIdentifier: 
   m_Active: 0
-  computeShader01: {fileID: 7200000, guid: db0d52c7ed1286442a23949469a5b153, type: 3}
-  computeShader02: {fileID: 7200000, guid: a72b1380360a2584680d614a9a2181fb, type: 3}
+  HeatmapComputeShader: {fileID: 7200000, guid: 993e8c0ff3f637d458dff6aa68dd81bb, type: 3}
+  HeatmapBrightnessComputeShader: {fileID: 7200000, guid: a72b1380360a2584680d614a9a2181fb, type: 3}
 --- !u!114 &11400000
 MonoBehaviour:
   m_ObjectHideFlags: 0
