@@ -30,7 +30,6 @@ public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
         int width = Screen.width, height = Screen.height;
 
         public void Setup(ComputeShader cs) {
-            // Here we define the compute shader
             HeatmapComputeShader = cs;
             kernel = cs.FindKernel("CSMain");
 

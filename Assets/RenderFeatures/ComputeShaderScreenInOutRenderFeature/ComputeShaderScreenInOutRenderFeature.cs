@@ -15,7 +15,7 @@ using UnityEngine.Experimental.Rendering;
 public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
     class HeatmapPass : ScriptableRenderPass {
         
-        // Compute Shader scripts
+        // Compute Shader programs
         ComputeShader HeatmapComputeShader;
         ComputeShader HeatmapBrightnessComputeShader;
         
@@ -37,10 +37,12 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
 
         public void Setup(ComputeShader cs1, ComputeShader cs2) {
             
-            // Here are define the both Compute shader
-            // The output of the first one will be used as CameraColor 
-            // and the second one uses the current CameraColor as input to process
-            // another one as result.
+            // Both compute shaders are defined here.
+            // The first compute shader generates an output
+            // that is stored in the CameraColor.
+            // The second compute shader then takes this CameraColor
+            // as its input, processes it further,
+            // and produces the final result.
             HeatmapComputeShader = cs1;
             HeatmapBrightnessComputeShader = cs2;
             kernelHeatMapComputeShader = cs1.FindKernel("CSMain");
