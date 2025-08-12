@@ -86,14 +86,14 @@ public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
 
             // This is the definition of the compute render pass,
             // where the data to be processed by the compute shader is assigned.
-            using (var builder = graph.AddComputePass<ComputePassData>("ComputeHeatmapPass", out var data))
+            using (var builder = graph.AddComputePass<ComputePassData>("ComputeHeatmapPass", out var passData))
             {
                 // Assign data to the compute shader data
-                data.compute = HeatmapComputeShader;
-                data.kernel = kernel;
-                data.output = heatmapHandle;
-                data.enemyHandle = enemyHandle;
-                data.enemyCount = enemyCount;
+                passData.compute = HeatmapComputeShader;
+                passData.kernel = kernel;
+                passData.output = heatmapHandle;
+                passData.enemyHandle = enemyHandle;
+                passData.enemyCount = enemyCount;
 
                 // Declare resource usage
                 builder.UseTexture(heatmapHandle, AccessFlags.Write);
@@ -111,7 +111,7 @@ public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
             
             
             // Here we get the ResourceData
-            // and assign to the cameraColor the texHandle
+            // and assign to the cameraColor the heatmapHandle
             var resourceData = context.Get<UniversalResourceData>();
             resourceData.cameraColor = heatmapHandle;
         }
