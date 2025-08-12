@@ -24,7 +24,7 @@ public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
         const int enemyCount = 64;
         
         // RT handles intended for later use by the render graph.
-        RTHandle heatmapHandle;
+        RTHandle heatmapTextureHandle;
         
         // Screen resolution
         int width = Screen.width, height = Screen.height;
@@ -33,15 +33,15 @@ public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
             HeatmapComputeShader = cs;
             kernel = cs.FindKernel("CSMain");
 
-            if (heatmapHandle == null || heatmapHandle.rt.width != width || heatmapHandle.rt.height != height) {
-                heatmapHandle?.Release();
+            if (heatmapTextureHandle == null || heatmapTextureHandle.rt.width != width || heatmapTextureHandle.rt.height != height) {
+                heatmapTextureHandle?.Release();
                 var desc = new RenderTextureDescriptor(width, height, RenderTextureFormat.Default, 0) {
                     enableRandomWrite = true,
                     msaaSamples = 1,
                     sRGB = false,
                     useMipMap = false
                 };
-                heatmapHandle = RTHandles.Alloc(desc, name: "_HeatmapRT");
+                heatmapTextureHandle = RTHandles.Alloc(desc, name: "_HeatmapRT");
             }
 
             if (enemyBuffer == null || enemyBuffer.count != enemyCount) {
@@ -61,15 +61,15 @@ public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
         }
         
         // This is the core of the RenderGraph system, where the compute pass is executed every frame.
-        // Their purpose can be summarized in three steps:
+        // The purpose of the compute pass can be summarized in three steps:
         
-        // 1- Updates enemy positions using Perlin noise, then uploads them to a GPU buffer.
-        // 2- Sets up a compute pass in the render graph that generates a heatmap texture
+        // 1- Update enemy positions using Perlin noise, then upload them to a GPU buffer.
+        // 2- Set up a compute pass in the render graph that generates a heatmap texture
         //    based on enemy positions.
-        // 3- Assigns the resulting texture to the camera's color buffer for rendering.
+        // 3- Assign the resulting texture to the camera's color buffer for rendering.
         public override void RecordRenderGraph(RenderGraph graph, ContextContainer context) {
             
-            // Populated the enemy positions
+            // Update the enemy positions
             for (int i = 0; i < enemyCount; i++) {
                 float t = Time.time * 0.5f + i * 0.1f;
                 float x = Mathf.PerlinNoise(t, i * 1.31f) * width;
@@ -81,7 +81,7 @@ public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
             enemyBuffer.SetData(enemyPositions);
 
             // The texture handle and the buffer handle for the compute pass
-            TextureHandle texHandle = graph.ImportTexture(heatmapHandle);
+            TextureHandle heatmapHandle = graph.ImportTexture(heatmapTextureHandle);
             BufferHandle enemyHandle = graph.ImportBuffer(enemyBuffer);
 
             // This is the definition of the compute render pass,
@@ -91,12 +91,12 @@ public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
                 // Assign data to the compute shader data
                 data.compute = HeatmapComputeShader;
                 data.kernel = kernel;
-                data.output = texHandle;
+                data.output = heatmapHandle;
                 data.enemyHandle = enemyHandle;
                 data.enemyCount = enemyCount;
 
                 // Declare resource usage
-                builder.UseTexture(texHandle, AccessFlags.Write);
+                builder.UseTexture(heatmapHandle, AccessFlags.Write);
                 builder.UseBuffer(enemyHandle, AccessFlags.Read);
 
                 // Set the function to execute the compute pass
@@ -113,13 +113,13 @@ public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
             // Here we get the ResourceData
             // and assign to the cameraColor the texHandle
             var resourceData = context.Get<UniversalResourceData>();
-            resourceData.cameraColor = texHandle;
+            resourceData.cameraColor = heatmapHandle;
         }
 
 
         public void Cleanup() {
-            heatmapHandle?.Release();
-            heatmapHandle = null;
+            heatmapTextureHandle?.Release();
+            heatmapTextureHandle = null;
 
             enemyBuffer?.Release();
             enemyBuffer = null;

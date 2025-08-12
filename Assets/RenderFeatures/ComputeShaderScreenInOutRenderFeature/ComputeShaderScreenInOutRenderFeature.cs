@@ -91,17 +91,17 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
             public TextureHandle output;
         }
         
-        // This is the core of the RenderGraph system, where compute passes are executed every frame.
-        // Their purpose can be summarized in three steps:
+        // This is the core of the RenderGraph system, where the compute passes are executed every frame.
+        // The purpose of the compute pass can be summarized in three steps:
         
-        // 1- Updates enemy positions using Perlin noise, then uploads them to a GPU buffer.
-        // 2- Sets up two compute passes in the render graph: the first generates a heatmap texture
+        // 1- Update enemy positions using Perlin noise, then upload them to a GPU buffer.
+        // 2- Set up two compute passes in the render graph: the first generates a heatmap texture
         //      based on enemy positions, while the second further processes the resulting texture
         //      adding a bit of brightness with another compute shader.
-        // 3- Assigns the resulting textures from each compute pass to the camera's color buffer for rendering.
+        // 3- Assign the resulting textures from each compute pass to the camera's color buffer for rendering.
         public override void RecordRenderGraph(RenderGraph graph, ContextContainer context) {
             
-            // Populated the enemy positions
+            // Update the enemy positions
             for (int i = 0; i < enemyCount; i++) {
                 float t = Time.time * 0.5f + i * 0.1f;
                 float x = Mathf.PerlinNoise(t, i * 1.31f) * width;
@@ -113,7 +113,7 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
             enemyBuffer.SetData(enemyPositions);
 
             // The texture handle and the buffer handle for the first compute pass
-            TextureHandle texHandle = graph.ImportTexture(heatmapTextureHandle);
+            TextureHandle heatmapHandle = graph.ImportTexture(heatmapTextureHandle);
             BufferHandle enemyHandle = graph.ImportBuffer(enemyBuffer);
 
             // This is the definition of the compute render pass,
@@ -123,12 +123,12 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
                 // Assign data to the compute shader data
                 data.compute = HeatmapComputeShader;
                 data.kernel = kernelHeatMapComputeShader;
-                data.output = texHandle;
+                data.output = heatmapHandle;
                 data.enemyHandle = enemyHandle;
                 data.enemyCount = enemyCount;
 
                 // Declare resource usage
-                builder.UseTexture(texHandle, AccessFlags.Write);
+                builder.UseTexture(heatmapHandle, AccessFlags.Write);
                 builder.UseBuffer(enemyHandle, AccessFlags.Read);
 
                 // Set the function to execute the compute pass
@@ -144,7 +144,7 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
             // Here the texture resulted from the first compute shader
             // is assigned to the camera Color
             var resourceData = context.Get<UniversalResourceData>();
-            resourceData.cameraColor = texHandle;
+            resourceData.cameraColor = heatmapHandle;
 
             // A new compute pass will be build and this is the resulted Texture handle
             TextureHandle resultedTextureHandle = graph.ImportTexture(heatmapBrightnessTextureHandle);
