@@ -204,9 +204,9 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature {
         if (!SystemInfo.supportsComputeShaders)
             return;
 
-        pass.Setup(HeatmapComputeShader, HeatmapBrightnessComputeShader);
         if (renderingData.cameraData.cameraType == CameraType.Game)
         {
+            pass.Setup(HeatmapComputeShader, HeatmapBrightnessComputeShader);
             renderer.EnqueuePass(pass);
         }
     }

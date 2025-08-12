@@ -138,10 +138,10 @@ public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
     public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData) {
         if (!SystemInfo.supportsComputeShaders)
             return;
-
-        pass.Setup(HeatmapComputeShader);
+        
         if (renderingData.cameraData.cameraType == CameraType.Game)
         {
+            pass.Setup(HeatmapComputeShader);
             renderer.EnqueuePass(pass);
         }
     }
