@@ -25,13 +25,13 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature
         int m_KernelHeatmapBrightnessComputeShader;
 
         // Heatmap compute shader (uses a compute shader to simulate a group of enemies moving around)
-        GraphicsBuffer enemyBuffer;
-        Vector2[] enemyPositions;
+        BufferHandle m_EnemyBuffer;
+        Vector2[] m_EnemyPositions;
         const int k_EnemyCount = 64;
 
         // RT handles intended for later use by the render graph.
-        RTHandle heatmapTextureHandle;
-        RTHandle heatmapBrightnessTextureHandle;
+        TextureHandle m_heatmapTextureHandle;
+        TextureHandle m_heatmapBrightnessTextureHandle;
         
         // Screen resolution
         int width = Screen.width, height = Screen.height;
@@ -52,20 +52,21 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature
             
             
             
-            if (heatmapTextureHandle == null || heatmapTextureHandle.rt.width != width || heatmapTextureHandle.rt.height != height) 
+            
+            /*if (m_heatmapTextureHandle == null || m_heatmapTextureHandle.rt.width != width || m_heatmapTextureHandle.rt.height != height) 
             {
-                heatmapTextureHandle?.Release();
+                m_heatmapTextureHandle?.Release();
                 var desc = new RenderTextureDescriptor(width, height, RenderTextureFormat.Default, 0) {
                     enableRandomWrite = true,
                     msaaSamples = 1,
                     sRGB = false,
                     useMipMap = false
                 };
-                heatmapTextureHandle = RTHandles.Alloc(desc, name: "_HeatmapRT01");
+                m_heatmapTextureHandle = RTHandles.Alloc(desc, name: "_HeatmapRT01");
             }
-            if (heatmapBrightnessTextureHandle == null || heatmapBrightnessTextureHandle.rt.width != width || heatmapBrightnessTextureHandle.rt.height != height)
+            if (m_heatmapBrightnessTextureHandle == null || m_heatmapBrightnessTextureHandle.rt.width != width || m_heatmapBrightnessTextureHandle.rt.height != height)
             {
-                heatmapBrightnessTextureHandle?.Release();
+                m_heatmapBrightnessTextureHandle?.Release();
                 var desc = new RenderTextureDescriptor(width, height, RenderTextureFormat.Default, 0)
                 {
                     enableRandomWrite = true,
@@ -73,15 +74,15 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature
                     sRGB = false,
                     useMipMap = false
                 };
-                heatmapBrightnessTextureHandle = RTHandles.Alloc(desc, name: "_HeatmapRT02");
+                m_heatmapBrightnessTextureHandle = RTHandles.Alloc(desc, name: "_HeatmapRT02");
             }
 
-            if (enemyBuffer == null || enemyBuffer.count != k_EnemyCount) 
+            if (m_EnemyBuffer == null || m_EnemyBuffer.count != k_EnemyCount) 
             {
-                enemyBuffer?.Release();
-                enemyBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, k_EnemyCount, sizeof(float) * 2);
-                enemyPositions = new Vector2[k_EnemyCount];
-            }/**/
+                //m_EnemyBuffer?.Release();
+                //m_EnemyBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, k_EnemyCount, sizeof(float) * 2);
+                m_EnemyPositions = new Vector2[k_EnemyCount];
+            }*/
         }
 
         // Compute Pass Data 
@@ -92,7 +93,7 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature
             public int kernel;
             public int enemyCount;
             public BufferHandle enemyHandle;
-            public TextureHandle input;
+            public TextureHandle input;//TODO
             public TextureHandle output;
         }
         
@@ -106,33 +107,52 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature
         // 3- Assign the resulting textures from each compute pass to the camera's color buffer for rendering.
         public override void RecordRenderGraph(RenderGraph graph, ContextContainer context) 
         {
+            m_EnemyPositions = new Vector2[k_EnemyCount];
+            
             // Update the enemy positions
             for (int i = 0; i < k_EnemyCount; i++) {
                 float t = Time.time * 0.5f + i * 0.1f;
                 float x = Mathf.PerlinNoise(t, i * 1.31f) * width;
                 float y = Mathf.PerlinNoise(i * 0.91f, t) * height;
-                enemyPositions[i] = new Vector2(x, y);
+                m_EnemyPositions[i] = new Vector2(x, y);
             }
             
-            TextureHandle heatmapHandle;
-            BufferHandle enemyHandle;
+            var resourceData = context.Get<UniversalResourceData>();
+            
+            // New code
+            var heatmapDesc = new TextureDesc(width, height)
+            {
+                name = "HeatmapHandle",
+                width = resourceData.cameraColor.GetDescriptor(graph).width,
+                height = resourceData.cameraColor.GetDescriptor(graph).height,
+            }; 
+            m_heatmapTextureHandle = graph.CreateTexture(heatmapDesc);
+            
+            var heatmapDescBright = new TextureDesc(width, height)
+            {
+                name = "BrightnessHandle",
+                width = resourceData.cameraColor.GetDescriptor(graph).width,
+                height = resourceData.cameraColor.GetDescriptor(graph).height,
+            };
+            m_heatmapBrightnessTextureHandle = graph.CreateTexture(heatmapDescBright);
+            
+            var bufferDesc = new BufferDesc()
+            {
+                name = "EnemyBuffer",
+                stride = sizeof(float) * 2,
+                count = k_EnemyCount
+            };
+            m_EnemyBuffer = graph.CreateBuffer(bufferDesc);
 
             // This is the definition of the compute render pass,
             // where the data to be processed by the compute shader is assigned.
             using (var builder = graph.AddComputePass<ComputePassData>("ComputeHeatmapPass", out var passData))
             {
-                // Set the enemy buffer data
-                enemyBuffer.SetData(enemyPositions);
-            
-                // The texture handle and the buffer handle for the first compute pass
-                heatmapHandle = graph.ImportTexture(heatmapTextureHandle);
-                enemyHandle = graph.ImportBuffer(enemyBuffer);
-                
                 // Assign data to the compute shader data
                 passData.compute = m_HeatmapComputeShader;
                 passData.kernel = m_KernelHeatMapComputeShader;
-                passData.output = heatmapHandle;
-                passData.enemyHandle = enemyHandle;
+                passData.output = m_heatmapTextureHandle;
+                passData.enemyHandle = m_EnemyBuffer;
                 passData.enemyCount = k_EnemyCount;
 
                 // Declare resource usage
@@ -142,8 +162,9 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature
                 // Set the function to execute the compute pass
                 builder.SetRenderFunc((ComputePassData data, ComputeGraphContext ctx) =>
                 {
+                    ctx.cmd.SetBufferData(data.enemyHandle, m_EnemyPositions);
                     ctx.cmd.SetComputeIntParam(data.compute, "k_EnemyCount", data.enemyCount);
-                    ctx.cmd.SetComputeBufferParam(data.compute, data.kernel, "enemyPositions", data.enemyHandle);
+                    ctx.cmd.SetComputeBufferParam(data.compute, data.kernel, "m_EnemyPositions", data.enemyHandle);
                     ctx.cmd.SetComputeTextureParam(data.compute, data.kernel, "heatmapTexture", data.output);
                     ctx.cmd.DispatchCompute(data.compute, data.kernel, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
                 });
@@ -151,10 +172,11 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature
 
             // Here the texture resulted from the first compute shader
             // is assigned to the camera color
-            var resourceData = context.Get<UniversalResourceData>();
-            resourceData.cameraColor = heatmapHandle;
+            // Cool part
+             //var resourceData = context.Get<UniversalResourceData>();
+            resourceData.cameraColor = m_heatmapTextureHandle;
             
-            TextureHandle resultTextureHandle = graph.ImportTexture(heatmapBrightnessTextureHandle);
+            TextureHandle resultTextureHandle = graph.ImportTexture(m_heatmapBrightnessTextureHandle);
             
             // This is the second compute render pass, in this pass
             // the input is the current activeColorTexture and the output
@@ -177,23 +199,23 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature
                     ctx.cmd.SetComputeTextureParam(data.compute, data.kernel, "heatmapTexture", data.input);
                     ctx.cmd.SetComputeTextureParam(data.compute, data.kernel, "Result", data.output);
                     ctx.cmd.DispatchCompute(data.compute, data.kernel, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
-                });
+                }); //TESTING
             }
             
             // The resulted texture of the compute pass is assigned to the current Camera Color
-            resourceData.cameraColor = resultTextureHandle;
+            resourceData.cameraColor = resultTextureHandle; //TESTING
         }
 
 
         public void Cleanup() 
         {
-            heatmapTextureHandle?.Release();
-            heatmapTextureHandle = null;
-            heatmapBrightnessTextureHandle?.Release();
-            heatmapBrightnessTextureHandle = null;
+            //m_heatmapTextureHandle?.Release();
+            //m_heatmapTextureHandle = null;
+            //m_heatmapBrightnessTextureHandle?.Release();
+            //m_heatmapBrightnessTextureHandle = null;
 
-            enemyBuffer?.Release();
-            enemyBuffer = null;
+            //m_EnemyBuffer?.Release();
+            //m_EnemyBuffer = null;
         }
     }
 
