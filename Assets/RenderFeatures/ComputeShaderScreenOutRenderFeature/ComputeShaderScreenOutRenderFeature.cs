@@ -11,12 +11,13 @@ using UnityEngine.Experimental.Rendering;
 // In the original sample the output image of the compute shader is applied to a RenderTexture
 // In this particular case, there is only a little change in the "InComputePass".
 
-public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
-    class HeatmapPass : ScriptableRenderPass {
-        
+public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature 
+{
+    class HeatmapPass : ScriptableRenderPass 
+    {
         // Compute Shader
-        ComputeShader HeatmapComputeShader;
-        int kernel;
+        ComputeShader m_HeatmapComputeShader;
+        int m_Kernel;
 
         // Compute Shader data
         GraphicsBuffer enemyBuffer;
@@ -29,11 +30,13 @@ public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
         // Screen resolution
         int width = Screen.width, height = Screen.height;
 
-        public void Setup(ComputeShader cs) {
-            HeatmapComputeShader = cs;
-            kernel = cs.FindKernel("CSMain");
+        public void Setup(ComputeShader heatmapCS) 
+        {
+            m_HeatmapComputeShader = heatmapCS;
+            m_Kernel = heatmapCS.FindKernel("CSMain");
 
-            if (heatmapTextureHandle == null || heatmapTextureHandle.rt.width != width || heatmapTextureHandle.rt.height != height) {
+            if (heatmapTextureHandle == null || heatmapTextureHandle.rt.width != width || heatmapTextureHandle.rt.height != height) 
+            {
                 heatmapTextureHandle?.Release();
                 var desc = new RenderTextureDescriptor(width, height, RenderTextureFormat.Default, 0) {
                     enableRandomWrite = true,
@@ -44,7 +47,8 @@ public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
                 heatmapTextureHandle = RTHandles.Alloc(desc, name: "_HeatmapRT");
             }
 
-            if (enemyBuffer == null || enemyBuffer.count != enemyCount) {
+            if (enemyBuffer == null || enemyBuffer.count != enemyCount) 
+            {
                 enemyBuffer?.Release();
                 enemyBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, enemyCount, sizeof(float) * 2);
                 enemyPositions = new Vector2[enemyCount];
@@ -67,8 +71,8 @@ public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
         // 2- Set up a compute pass in the render graph that generates a heatmap texture
         //    based on enemy positions.
         // 3- Assign the resulting texture to the camera's color buffer for rendering.
-        public override void RecordRenderGraph(RenderGraph graph, ContextContainer context) {
-            
+        public override void RecordRenderGraph(RenderGraph graph, ContextContainer context) 
+        {
             // Update the enemy positions
             for (int i = 0; i < enemyCount; i++) {
                 float t = Time.time * 0.5f + i * 0.1f;
@@ -89,8 +93,8 @@ public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
             using (var builder = graph.AddComputePass<ComputePassData>("ComputeHeatmapPass", out var passData))
             {
                 // Assign data to the compute shader data
-                passData.compute = HeatmapComputeShader;
-                passData.kernel = kernel;
+                passData.compute = m_HeatmapComputeShader;
+                passData.kernel = m_Kernel;
                 passData.output = heatmapHandle;
                 passData.enemyHandle = enemyHandle;
                 passData.enemyCount = enemyCount;
@@ -108,16 +112,14 @@ public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
                     ctx.cmd.DispatchCompute(data.compute, data.kernel, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
                 });
             }
-            
-            
             // Here we get the ResourceData
             // and assign to the cameraColor the heatmapHandle
             var resourceData = context.Get<UniversalResourceData>();
             resourceData.cameraColor = heatmapHandle;
         }
 
-
-        public void Cleanup() {
+        public void Cleanup() 
+        {
             heatmapTextureHandle?.Release();
             heatmapTextureHandle = null;
 
@@ -129,13 +131,15 @@ public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
     [SerializeField] ComputeShader HeatmapComputeShader;
     HeatmapPass pass;
 
-    public override void Create() {
+    public override void Create() 
+    {
         pass = new HeatmapPass {
             renderPassEvent = RenderPassEvent.AfterRenderingPostProcessing
         };
     }
 
-    public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData) {
+    public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData) 
+    {
         if (!SystemInfo.supportsComputeShaders)
             return;
         
@@ -146,7 +150,8 @@ public class ComputeShaderScreenOutRenderFeature : ScriptableRendererFeature {
         }
     }
 
-    protected override void Dispose(bool disposing) {
+    protected override void Dispose(bool disposing) 
+    {
         pass?.Cleanup();
     }
 }
