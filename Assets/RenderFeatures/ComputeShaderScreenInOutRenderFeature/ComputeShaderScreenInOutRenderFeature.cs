@@ -1,8 +1,10 @@
+using System.Numerics;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.RenderGraphModule;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.Experimental.Rendering;
+using Vector2 = UnityEngine.Vector2;
 
 // This RendererFeature demonstrates how to integrate a Compute Shader with RenderGraph.
 // In this example, the output of the Compute Shader is used to modify the CameraColor texture.
@@ -34,7 +36,7 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature
         TextureHandle m_heatmapBrightnessTextureHandle;
         
         // Screen resolution
-        int width = Screen.width, height = Screen.height;
+        int targetWidth = Screen.width, targetHeight = Screen.height;
 
         public void Setup(ComputeShader heatmapCS, ComputeShader heatmapBrightnessCS)
         {
@@ -62,6 +64,8 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature
             public BufferHandle enemyHandle;
             public TextureHandle input;
             public TextureHandle output;
+            public int width;
+            public int height;
         }
         
         // This is the core of the RenderGraph system, where the compute passes are executed every frame.
@@ -80,14 +84,18 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature
             // Update the enemy positions
             for (int i = 0; i < k_EnemyCount; i++) {
                 float t = Time.time * 0.5f + i * 0.1f;
-                float x = Mathf.PerlinNoise(t, i * 1.31f) * width;
-                float y = Mathf.PerlinNoise(i * 0.91f, t) * height;
+                float x = Mathf.PerlinNoise(t, i * 1.31f) * targetWidth;
+                float y = Mathf.PerlinNoise(i * 0.91f, t) * targetHeight;
                 m_EnemyPositions[i] = new Vector2(x, y);
             }
             
             // Retrieving the Universal Resource Data, which contains all texture resources,
             // such as the active color texture, depth texture, and more.
             var resourceData = context.Get<UniversalResourceData>();
+            
+            // TODO
+            targetWidth = resourceData.cameraColor.GetDescriptor(graph).width;
+            targetHeight = resourceData.cameraColor.GetDescriptor(graph).height;
             
             // Getting the activecolorTexture descriptor for later use in the Texture handlers
             var cameraColorDescriptor = resourceData.activeColorTexture.GetDescriptor(graph);
@@ -100,7 +108,7 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature
             // Creating a texture descriptor based on the activeColorTexture's descriptor values.
             // This texture descriptor will be used by both texture handlers:
             // // heatmapTextureHandle and heatmapBrightnessTexture.
-            var heatmapDesc = new TextureDesc(width, height)
+            var heatmapDesc = new TextureDesc(targetWidth, targetHeight)
             {
                 name = "HeatmapHandleDescriptor",
                 width = cameraColorDescriptor.width,
@@ -142,13 +150,15 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature
                 passData.enemyHandle = m_EnemyBuffer;
                 passData.enemyCount = k_EnemyCount;
                 passData.positions = m_EnemyPositions;
+                passData.width = targetWidth;
+                passData.height = targetHeight;
 
                 // Declare resource usage within this pass using the builder.
                 builder.UseTexture(passData.output, AccessFlags.Write);
                 builder.UseBuffer(passData.enemyHandle, AccessFlags.Read);
 
                 // Set the function to execute the compute pass
-                builder.SetRenderFunc((ComputePassData data, ComputeGraphContext ctx) =>
+                builder.SetRenderFunc(static(ComputePassData data, ComputeGraphContext ctx) =>
                 {
                     // the SetBufferData use a command buffer to send the enemy position data
                     // from the passData.enemyHandle to the passData.positions
@@ -157,7 +167,7 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature
                     ctx.cmd.SetComputeIntParam(data.compute, "k_EnemyCount", data.enemyCount);
                     ctx.cmd.SetComputeBufferParam(data.compute, data.kernel, "m_EnemyPositions", data.enemyHandle);
                     ctx.cmd.SetComputeTextureParam(data.compute, data.kernel, "heatmapTexture", data.output);
-                    ctx.cmd.DispatchCompute(data.compute, data.kernel, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
+                    ctx.cmd.DispatchCompute(data.compute, data.kernel, Mathf.CeilToInt(data.width / 8f), Mathf.CeilToInt(data.height / 8f), 1);
                 });
             }
             
@@ -173,17 +183,19 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature
                 passData.kernel = m_KernelHeatmapBrightnessComputeShader;
                 passData.input = m_heatmapTextureHandle;
                 passData.output = m_heatmapBrightnessTextureHandle;
+                passData.width = targetWidth;
+                passData.height = targetHeight;
 
                 // Declare resource usage within this pass using the builder.
                 builder.UseTexture(passData.input, AccessFlags.Read);
                 builder.UseTexture(passData.output, AccessFlags.Write);
 
                 // Set the function to execute the compute pass
-                builder.SetRenderFunc((ComputePassData data, ComputeGraphContext ctx) =>
+                builder.SetRenderFunc(static(ComputePassData data, ComputeGraphContext ctx) =>
                 {
                     ctx.cmd.SetComputeTextureParam(data.compute, data.kernel, "heatmapTexture", data.input);
-                    ctx.cmd.SetComputeTextureParam(data.compute, data.kernel, "Result", data.output);
-                    ctx.cmd.DispatchCompute(data.compute, data.kernel, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
+                    ctx.cmd.SetComputeTextureParam(data.compute, data.kernel, "result", data.output);
+                    ctx.cmd.DispatchCompute(data.compute, data.kernel, Mathf.CeilToInt(data.width / 8f), Mathf.CeilToInt(data.height / 8f), 1);
                 });
             }
             
@@ -206,8 +218,17 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature
 
     public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData) 
     {
-        if (!SystemInfo.supportsComputeShaders)
+        if (HeatmapComputeShader == null || HeatmapBrightnessComputeShader == null)
+        {
+            Debug.Log("Set both shaders for the ComputeShaderRendererFeature.");
             return;
+        }
+        
+        if (!SystemInfo.supportsComputeShaders)
+        {
+            Debug.Log(
+                "The ComputeShaderRendererFeature cannot be added because this system doesn't support compute shaders.");
+        }
 
         if (renderingData.cameraData.cameraType == CameraType.Game)
         {
