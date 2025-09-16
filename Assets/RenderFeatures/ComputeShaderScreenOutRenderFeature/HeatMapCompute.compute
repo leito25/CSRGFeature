@@ -1,8 +1,8 @@
 #pragma kernel CSMain
 
 RWTexture2D<float> heatmapTexture;
-StructuredBuffer<float2> enemyPositions;
-int enemyCount;
+StructuredBuffer<float2> m_EnemyPositions;
+int k_EnemyCount;
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
@@ -11,8 +11,8 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     float2 uv = pixel;
     float heat = 0;
 
-    for (int i = 0; i < enemyCount; i++) {
-        float2 enemyPos = enemyPositions[i];
+    for (int i = 0; i < k_EnemyCount; i++) {
+        float2 enemyPos = m_EnemyPositions[i];
         float dist = distance(uv, enemyPos);
         float radius = 20.0;
         heat += saturate(1.0 - dist / radius); // linear falloff
