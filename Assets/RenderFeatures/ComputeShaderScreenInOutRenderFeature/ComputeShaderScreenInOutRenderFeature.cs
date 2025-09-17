@@ -1,9 +1,7 @@
-using System.Numerics;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.RenderGraphModule;
 using UnityEngine.Rendering.Universal;
-using UnityEngine.Experimental.Rendering;
 using Vector2 = UnityEngine.Vector2;
 
 // This RendererFeature demonstrates how to integrate a Compute Shader with RenderGraph.
@@ -34,9 +32,6 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature
         // Texture Handles intended for later use by the render graph.
         TextureHandle m_HeatmapTextureHandle;
         TextureHandle m_HeatmapBrightnessTextureHandle;
-        
-        // Screen resolution
-        //int targetWidth = Screen.width, targetHeight = Screen.height;
 
         public void Setup(ComputeShader heatmapCS, ComputeShader heatmapBrightnessCS)
         {
@@ -49,7 +44,7 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature
             m_KernelHeatMapComputeShader = heatmapCS.FindKernel("CSMain");
             m_KernelHeatmapBrightnessComputeShader = heatmapBrightnessCS.FindKernel("CSMain");
             
-            // Initialize enemy positions in the setup since the size never changes
+            // The enemy positions are initialized
             m_EnemyPositions = new Vector2[k_EnemyCount];
         }
 
@@ -88,14 +83,6 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature
         // 3- Assign the resulting texture from one computeShader pass to the next, and finally to the camera's color buffer for rendering.
         public override void RecordRenderGraph(RenderGraph graph, ContextContainer context) 
         {
-            // Update the enemy positions
-            /*for (int i = 0; i < k_EnemyCount; i++) {
-                float t = Time.time * 0.5f + i * 0.1f;
-                float x = Mathf.PerlinNoise(t, i * 1.31f) * targetWidth;
-                float y = Mathf.PerlinNoise(i * 0.91f, t) * targetHeight;
-                m_EnemyPositions[i] = new Vector2(x, y);
-            }*/
-            
             // Retrieving the Universal Resource Data, which contains all texture resources,
             // such as the active color texture, depth texture, and more.
             var resourceData = context.Get<UniversalResourceData>();
@@ -162,7 +149,7 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature
                 // Set the function to execute the computeShader pass (using static to improve the performance)
                 builder.SetRenderFunc(static(ComputePassData data, ComputeGraphContext ctx) =>
                 {
-                    // the SetBufferData use a command buffer to send the enemy position data
+                    // The SetBufferData use a command buffer to send the enemy position data
                     // from the passData.enemyHandle to the passData.positions
                     ctx.cmd.SetBufferData(data.enemyHandle, data.positions);//Use data.enemyPositions
                                                                             //to ensure it remains scoped to the render function.
@@ -212,11 +199,11 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature
     [SerializeField] ComputeShader HeatmapComputeShader;
     [SerializeField] ComputeShader HeatmapBrightnessComputeShader;
     // The HeatmapPass instance
-    HeatmapPass pass;
+    HeatmapPass heatmapPass;
 
     public override void Create() 
     {
-        pass = new HeatmapPass
+        heatmapPass = new HeatmapPass
         {
             renderPassEvent = RenderPassEvent.BeforeRenderingPostProcessing
         };
@@ -238,8 +225,8 @@ public class ComputeShaderScreenInOutRenderFeature : ScriptableRendererFeature
 
         if (renderingData.cameraData.cameraType == CameraType.Game)
         {
-            pass.Setup(HeatmapComputeShader, HeatmapBrightnessComputeShader);
-            renderer.EnqueuePass(pass);
+            heatmapPass.Setup(HeatmapComputeShader, HeatmapBrightnessComputeShader);
+            renderer.EnqueuePass(heatmapPass);
         }
     }
 }
