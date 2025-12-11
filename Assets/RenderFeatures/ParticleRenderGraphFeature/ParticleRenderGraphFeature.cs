@@ -30,14 +30,15 @@ public class ParticleRenderGraphFeature : ScriptableRendererFeature
         // Material for rendering
         Material m_ParticleMaterial;
 
-        // Mouse position (for simplicity, can be set from inspector or input)
+        // Mouse position (random to cover the screen)
         Vector2 m_MousePosition;
 
-        public void Setup(ComputeShader computeShader, Material material, Vector2 mousePos)
+        public void Setup(ComputeShader computeShader, Material material)
         {
             m_ParticleComputeShader = computeShader;
             m_ParticleMaterial = material;
-            m_MousePosition = mousePos;
+            // Generate random mouse position to cover the screen
+            m_MousePosition = new Vector2(Random.Range(-5f, 5f), Random.Range(-5f, 5f));
             m_KernelID = computeShader.FindKernel("CSParticle");
 
             // Initialize particles if not already
@@ -144,7 +145,6 @@ public class ParticleRenderGraphFeature : ScriptableRendererFeature
     // Inspector fields
     [SerializeField] ComputeShader ParticleComputeShader;
     [SerializeField] Material ParticleMaterial;
-    [SerializeField] Vector2 MousePosition; // For simplicity, set manually or get from input
 
     ParticlePass particlePass;
 
@@ -172,7 +172,7 @@ public class ParticleRenderGraphFeature : ScriptableRendererFeature
 
         if (renderingData.cameraData.cameraType == CameraType.Game)
         {
-            particlePass.Setup(ParticleComputeShader, ParticleMaterial, MousePosition);
+            particlePass.Setup(ParticleComputeShader, ParticleMaterial);
             renderer.EnqueuePass(particlePass);
         }
     }
