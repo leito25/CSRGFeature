@@ -30,15 +30,14 @@ public class ParticleRenderGraphFeature : ScriptableRendererFeature
         // Material for rendering
         Material m_ParticleMaterial;
 
-        // Mouse position (random to cover the screen)
+        // Mouse position
         Vector2 m_MousePosition;
 
-        public void Setup(ComputeShader computeShader, Material material)
+        public void Setup(ComputeShader computeShader, Material material, Vector2 mousePos)
         {
             m_ParticleComputeShader = computeShader;
             m_ParticleMaterial = material;
-            // Generate random mouse position to cover the screen
-            m_MousePosition = new Vector2(Random.Range(-5f, 5f), Random.Range(-5f, 5f));
+            m_MousePosition = mousePos;
             m_KernelID = computeShader.FindKernel("CSParticle");
 
             // Initialize buffer if not already
@@ -51,12 +50,14 @@ public class ParticleRenderGraphFeature : ScriptableRendererFeature
             m_ParticleArray = new Particle[k_ParticleCount];
             for (int i = 0; i < k_ParticleCount; i++)
             {
+                // Position around mouse position
                 float x = Random.value * 2 - 1.0f;
                 float y = Random.value * 2 - 1.0f;
                 float z = Random.value * 2 - 1.0f;
                 Vector3 xyz = new Vector3(x, y, z);
                 xyz.Normalize();
                 xyz *= Random.value * 5;
+                xyz += new Vector3(mousePos.x, mousePos.y, 0);
 
                 m_ParticleArray[i].position = xyz;
                 m_ParticleArray[i].velocity = Vector3.zero;
@@ -174,7 +175,14 @@ public class ParticleRenderGraphFeature : ScriptableRendererFeature
 
         if (renderingData.cameraData.cameraType == CameraType.Game)
         {
-            particlePass.Setup(ParticleComputeShader, ParticleMaterial);
+            // Calculate mouse position in world space
+            var camera = renderingData.cameraData.camera;
+            var mousePos = Input.mousePosition;
+            mousePos.y = Screen.height - mousePos.y; // Invert y
+            var p = camera.ScreenToWorldPoint(new Vector3(mousePos.x, mousePos.y, camera.nearClipPlane));
+            var cursorPos = new Vector2(p.x, p.y);
+
+            particlePass.Setup(ParticleComputeShader, ParticleMaterial, cursorPos);
             renderer.EnqueuePass(particlePass);
         }
     }
