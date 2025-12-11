@@ -41,27 +41,29 @@ public class ParticleRenderGraphFeature : ScriptableRendererFeature
             m_MousePosition = new Vector2(Random.Range(-5f, 5f), Random.Range(-5f, 5f));
             m_KernelID = computeShader.FindKernel("CSParticle");
 
-            // Initialize particles if not already
+            // Initialize buffer if not already
             if (m_PersistentParticleBuffer == null)
             {
-                m_ParticleArray = new Particle[k_ParticleCount];
-                for (int i = 0; i < k_ParticleCount; i++)
-                {
-                    float x = Random.value * 2 - 1.0f;
-                    float y = Random.value * 2 - 1.0f;
-                    float z = Random.value * 2 - 1.0f;
-                    Vector3 xyz = new Vector3(x, y, z);
-                    xyz.Normalize();
-                    xyz *= Random.value * 5;
-
-                    m_ParticleArray[i].position = xyz;
-                    m_ParticleArray[i].velocity = Vector3.zero;
-                    m_ParticleArray[i].life = Random.value * 5.0f + 1.0f;
-                }
-
                 m_PersistentParticleBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, k_ParticleCount, SIZE_PARTICLE);
-                m_PersistentParticleBuffer.SetData(m_ParticleArray);
             }
+
+            // Create new set of particles every frame
+            m_ParticleArray = new Particle[k_ParticleCount];
+            for (int i = 0; i < k_ParticleCount; i++)
+            {
+                float x = Random.value * 2 - 1.0f;
+                float y = Random.value * 2 - 1.0f;
+                float z = Random.value * 2 - 1.0f;
+                Vector3 xyz = new Vector3(x, y, z);
+                xyz.Normalize();
+                xyz *= Random.value * 5;
+
+                m_ParticleArray[i].position = xyz;
+                m_ParticleArray[i].velocity = Vector3.zero;
+                m_ParticleArray[i].life = Random.value * 5.0f + 1.0f;
+            }
+
+            m_PersistentParticleBuffer.SetData(m_ParticleArray);
 
 
         }
